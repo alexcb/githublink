@@ -16,36 +16,35 @@ func die(msg string, args ...interface{}) {
 	os.Exit(1)
 }
 
-func getGitSha() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
+func runCommandTrimmedOutput(args ...string) (string, error) {
+	if len(args) == 0 {
+		return "", fmt.Errorf("no command given")
 	}
-	sha := strings.TrimSpace(string(out))
-	return sha, nil
-}
-
-func getRemoteBranches(sha string) ([]string, error) {
-	cmd := exec.Command("git", "branch", "-r", "--contains", sha)
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	branches := []string{}
-	for _, line := range strings.Split(string(out), "\n") {
-		branches = append(branches, strings.TrimSpace(line))
-	}
-	return branches, nil
-}
-
-func getRemoteURL(remoteName string) (string, error) {
-	cmd := exec.Command("git", "config", "--get", "remote."+remoteName+".url")
+	cmd := exec.Command(args[0], args[1:]...)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+func runCommandSplitLines(args ...string) ([]string, error) {
+	out, err := runCommandTrimmedOutput(args...)
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(out, "\n"), nil
+}
+
+func getGitSha() (string, error) {
+	return runCommandTrimmedOutput("git", "rev-parse", "HEAD")
+}
+
+func getRemoteBranches(sha string) ([]string, error) {
+	return runCommandSplitLines("git", "branch", "-r", "--contains", sha)
+}
+
+func getRemoteURL(remoteName string) (string, error) {
+	return runCommandTrimmedOutput("git", "config", "--get", "remote."+remoteName+".url")
 }
 
 const sshGitPrefix = "git@github.com:"
@@ -84,14 +83,8 @@ func getGithubURL(gitURL, gitSha, path string, line int) (string, error) {
 	return formatGithubURL(user, repo, gitSha, path, line), nil
 }
 
-func isFileTracked(path string) error {
-	cmd := exec.Command("git", "ls-files", "--error-unmatch", path)
-	_, err := cmd.Output()
-	if err != nil {
-		return err
-	}
-	return nil
-
+func getFullRepoPath(path string) (string, error) {
+	return runCommandTrimmedOutput("git", "ls-files", "--full-name", "--error-unmatch", path)
 }
 
 func main() {
@@ -114,7 +107,7 @@ func main() {
 		}
 	}
 
-	err := isFileTracked(path)
+	fullPath, err := getFullRepoPath(path)
 	if err != nil {
 		die("%s is not tracked by git: %v\n", path, err)
 	}
@@ -135,7 +128,7 @@ func main() {
 	if err != nil {
 		die("failed to get remote url: %v\n", err)
 	}
-	webURL, err := getGithubURL(remoteURL, gitSha, path, line)
+	webURL, err := getGithubURL(remoteURL, gitSha, fullPath, line)
 	if err != nil {
 		die("failed to get remote url: %v\n", err)
 	}
