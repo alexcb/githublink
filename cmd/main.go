@@ -12,7 +12,7 @@ import (
 )
 
 func die(msg string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, msg, args...)
+	fmt.Fprintf(os.Stderr, msg+"\n", args...)
 	os.Exit(1)
 }
 
@@ -23,7 +23,7 @@ func runCommandTrimmedOutput(args ...string) (string, error) {
 	cmd := exec.Command(args[0], args[1:]...)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("command %v failed: %w", args, err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -32,7 +32,13 @@ func runCommandSplitLines(args ...string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return strings.Split(out, "\n"), nil
+	lines := []string{}
+	for _, l := range strings.Split(out, "\n") {
+		if l != "" {
+			lines = append(lines, l)
+		}
+	}
+	return lines, nil
 }
 
 func getGitSha() (string, error) {
@@ -94,7 +100,7 @@ func main() {
 	}
 
 	if len(os.Args) != 2 && len(os.Args) != 3 {
-		die("usage: %s <path> [<line-number>]\n", progName)
+		die("usage: %s <path> [<line-number>]", progName)
 	}
 
 	line := -1
@@ -103,22 +109,22 @@ func main() {
 		var err error
 		line, err = strconv.Atoi(os.Args[2])
 		if err != nil {
-			die("failed to convert %s to int: %v\n", os.Args[2], err)
+			die("failed to convert %s to int: %v", os.Args[2], err)
 		}
 	}
 
 	fullPath, err := getFullRepoPath(path)
 	if err != nil {
-		die("%s is not tracked by git: %v\n", path, err)
+		die("%s is not tracked by git: %v", path, err)
 	}
 
 	gitSha, err := getGitSha()
 	if err != nil {
-		die("failed to get git sha: %v\n", err)
+		die("failed to get git sha: %v", err)
 	}
 	remoteBranches, err := getRemoteBranches(gitSha)
 	if err != nil {
-		die("failed to get remote branches: %v\n", err)
+		die("failed to get remote branches: %v", err)
 	}
 	if len(remoteBranches) == 0 {
 		die("current git commit doesn't exist on any remote branches")
@@ -126,11 +132,11 @@ func main() {
 	remoteName := strings.Split(remoteBranches[0], "/")[0]
 	remoteURL, err := getRemoteURL(remoteName)
 	if err != nil {
-		die("failed to get remote url: %v\n", err)
+		die("failed to get remote url: %v", err)
 	}
 	webURL, err := getGithubURL(remoteURL, gitSha, fullPath, line)
 	if err != nil {
-		die("failed to get remote url: %v\n", err)
+		die("failed to get remote url: %v", err)
 	}
 	err = browser.OpenURL(webURL)
 	if err != nil {
