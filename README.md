@@ -51,5 +51,12 @@ function! GitHubLink()
     execute "!" . "githublink" . " " . bufname("%") . " " . ( line(".") )
 ```
 
+## How is this different from `gh browse`?
+
+1. No need to login.
+2. It opens the URL based on the location of HEAD, rather than always pointing to the main branch. This allows you to share URLs to specific lines that won't change (i.e. break).
+3. I'll accept PRs to expand this to work with gitlab or other repos.
+4. I wrote my initial implementation in python in [2020](https://github.com/alexcb/acbutils/blob/18a4bec7b1f11182ce4ae7cc5f81a60cf9083098/scripts/githublink); `gh browse` was written in [2021](https://github.com/cli/cli/commit/68ce66801b5fb076e449d30c3dcb2867d7cd47b9), the command `githublink` is stuck in my muscle-memory.
+
 ## Licensing
 githublink is licensed under the Mozilla Public License Version 2.0. See [LICENSE](LICENSE).
