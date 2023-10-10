@@ -45,6 +45,14 @@ func getGitSha() (string, error) {
 	return runCommandTrimmedOutput("git", "rev-parse", "HEAD")
 }
 
+func isGitSha(sha string) bool {
+	output, err := runCommandTrimmedOutput("git", "rev-parse", sha)
+	if err != nil {
+		return false
+	}
+	return output == sha
+}
+
 func getRemoteBranches(sha string) ([]string, error) {
 	return runCommandSplitLines("git", "branch", "-r", "--contains", sha)
 }
@@ -71,27 +79,57 @@ func getUserAndRepo(s string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func getGithubURL(gitURL, gitSha, path string, line int) (string, error) {
+func getGithubUserAndRepo(gitURL string) (string, string, error) {
 	var urlPath string
 	if strings.HasPrefix(gitURL, sshGitPrefix) {
 		urlPath = strings.TrimPrefix(gitURL, sshGitPrefix)
 	} else {
 		u, err := url.Parse(gitURL)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		urlPath = u.Path
 	}
 	user, repo, err := getUserAndRepo(urlPath)
+	if err != nil {
+		return "", "", err
+	}
+	return user, repo, nil
+}
+
+func getGithubURL(gitURL, gitSha, path string, line int) (string, error) {
+	user, repo, err := getGithubUserAndRepo(gitURL)
 	if err != nil {
 		return "", err
 	}
 	return formatGithubURL(user, repo, gitSha, path, line), nil
 }
 
+// getGithubCommitURL points to a single commit
+func getGithubCommitURL(gitURL, gitSha string) (string, error) {
+	user, repo, err := getGithubUserAndRepo(gitURL)
+	if err != nil {
+		return "", err
+	}
+	return formatGithubCommitURL(user, repo, gitSha), nil
+}
+
+func formatGithubCommitURL(user, repo, gitSha string) string {
+	return fmt.Sprintf("https://github.com/%s/%s/commit/%s", user, repo, gitSha)
+}
+
 func getFullRepoPath(path string) (string, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if fileInfo.IsDir() {
+		return path, nil
+	}
 	return runCommandTrimmedOutput("git", "ls-files", "--full-name", "--error-unmatch", path)
 }
+
+// https://github.com/earthly/earthly/commit/dab70be66fecacaa57ba63018dbfa282865eded9
 
 func main() {
 	progName := "githublink"
@@ -113,14 +151,23 @@ func main() {
 		}
 	}
 
+	var singleCommitSha string
+
 	fullPath, err := getFullRepoPath(path)
 	if err != nil {
-		die("%s is not tracked by git: %v", path, err)
+		if len(path) == 40 && isGitSha(path) {
+			singleCommitSha = path
+		} else {
+			die("%s is not tracked by git: %v", path, err)
+		}
 	}
 
-	gitSha, err := getGitSha()
-	if err != nil {
-		die("failed to get git sha: %v", err)
+	var gitSha string
+	if singleCommitSha == "" {
+		gitSha, err = getGitSha()
+		if err != nil {
+			die("failed to get git sha: %v", err)
+		}
 	}
 	remoteBranches, err := getRemoteBranches(gitSha)
 	if err != nil {
@@ -134,10 +181,20 @@ func main() {
 	if err != nil {
 		die("failed to get remote url: %v", err)
 	}
-	webURL, err := getGithubURL(remoteURL, gitSha, fullPath, line)
-	if err != nil {
-		die("failed to get remote url: %v", err)
+
+	var webURL string
+	if singleCommitSha != "" {
+		webURL, err = getGithubCommitURL(remoteURL, singleCommitSha)
+		if err != nil {
+			die("failed to get remote url: %v", err)
+		}
+	} else {
+		webURL, err = getGithubURL(remoteURL, gitSha, fullPath, line)
+		if err != nil {
+			die("failed to get remote url: %v", err)
+		}
 	}
+
 	err = browser.OpenURL(webURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to open url automatically: %s\n", err)
