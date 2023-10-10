@@ -151,19 +151,20 @@ func main() {
 		}
 	}
 
-	var singleCommitSha string
+	var gitSha string
+	showSingleCommit := false
 
 	fullPath, err := getFullRepoPath(path)
 	if err != nil {
 		if len(path) == 40 && isGitSha(path) {
-			singleCommitSha = path
+			gitSha = path
+			showSingleCommit = true
 		} else {
 			die("%s is not tracked by git: %v", path, err)
 		}
 	}
 
-	var gitSha string
-	if singleCommitSha == "" {
+	if gitSha == "" {
 		gitSha, err = getGitSha()
 		if err != nil {
 			die("failed to get git sha: %v", err)
@@ -183,8 +184,8 @@ func main() {
 	}
 
 	var webURL string
-	if singleCommitSha != "" {
-		webURL, err = getGithubCommitURL(remoteURL, singleCommitSha)
+	if showSingleCommit {
+		webURL, err = getGithubCommitURL(remoteURL, gitSha)
 		if err != nil {
 			die("failed to get remote url: %v", err)
 		}
